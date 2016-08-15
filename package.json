@@ -4,7 +4,8 @@
   "description": "A chatbot helping you find bus and train stations around Spain (in English).",
   "main": "app_messenger.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node --use-strict app_messenger.js",
+    "test": "node test.js"
   },
   "author": "Ivan Lysiuchenko",
   "license": "ISC",

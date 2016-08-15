@@ -124,6 +124,14 @@ function clearFlags(context)
     delete context.unknown_location_train;
 }
 
+const firstEntityValue = (entities, entityStr) => {
+    const val = entities && entities[entityStr] && Array.isArray(entities[entityStr])
+        && entities[entityStr].length > 0 && entities[entityStr][0].value;
+    if (!val)
+        return null;
+    return (typeof val === 'object') ? val.value : val;
+};
+
 // *** *** END OF OUR FUNCTIONS *** ***
 
 
