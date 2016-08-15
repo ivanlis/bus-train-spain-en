@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const express = require('express');
 const fetch = require('node-fetch');
 const request = require('request');
+const config = require('config');
 
 let Wit = null;
 let log = null;
@@ -31,23 +32,29 @@ try {
 }
 
 // Webserver parameter
-const PORT = process.env.PORT || 8445;
+const PORT = process.env.NODE_PORT || 8445;
+const IP = process.env.NODE_IP || 'localhost';
 
 // Wit.ai parameters
-const WIT_TOKEN = process.env.WIT_TOKEN;
+//const WIT_TOKEN = process.env.WIT_TOKEN;
+const WIT_TOKEN = config.get('witToken');
 
 // Messenger API parameters
-const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
-if (!FB_PAGE_TOKEN) { throw new Error('missing FB_PAGE_TOKEN') }
-const FB_APP_SECRET = process.env.FB_APP_SECRET;
-if (!FB_APP_SECRET) { throw new Error('missing FB_APP_SECRET') }
+//const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+const FB_PAGE_TOKEN = config.get('fbPageToken');
+if (!FB_PAGE_TOKEN) { throw new Error('missing FB_PAGE_TOKEN'); }
+//const FB_APP_SECRET = process.env.FB_APP_SECRET;
+const FB_APP_SECRET = config.get('fbAppSecret');
+if (!FB_APP_SECRET) { throw new Error('missing FB_APP_SECRET'); }
 
-let FB_VERIFY_TOKEN = null;
-crypto.randomBytes(8, (err, buff) => {
-  if (err) throw err;
-  FB_VERIFY_TOKEN = buff.toString('hex');
-  console.log(`/webhook will accept the Verify Token "${FB_VERIFY_TOKEN}"`);
-});
+//let FB_VERIFY_TOKEN = null;
+//crypto.randomBytes(8, (err, buff) => {
+//  if (err) throw err;
+//  FB_VERIFY_TOKEN = buff.toString('hex');
+//  console.log(`/webhook will accept the Verify Token "${FB_VERIFY_TOKEN}"`);
+//});
+const FB_VERIFY_TOKEN = config.get('fbVerifyToken');
+if (!FB_VERIFY_TOKEN) { throw new Error('missing FB_VERIFY_TOKEN'); }
 
 // ----------------------------------------------------------------------------
 // Messenger API specific code
@@ -100,6 +107,26 @@ const findOrCreateSession = (fbid) => {
   return sessionId;
 };
 
+
+
+// *** *** OUR FUNCTIONS *** ***
+
+function clearFlags(context) 
+{
+    delete context.location_set;
+    delete context.location_unset;
+    delete context.unknown_location;
+    delete context.not_current_location;
+    delete context.missing_location;
+    delete context.bus_address;
+    delete context.train_address;
+    delete context.unknown_location_bus;
+    delete context.unknown_location_train;
+}
+
+// *** *** END OF OUR FUNCTIONS *** ***
+
+
 // Our bot actions
 const actions = {
   send({sessionId}, {text}) {
@@ -126,8 +153,81 @@ const actions = {
       return Promise.resolve()
     }
   },
-  // You should implement your custom actions here
-  // See https://wit.ai/docs/quickstart
+  // *** *** OUR ACTIONS *** ***
+    searchForBusStation({context, entities}) {
+        return new Promise(function(resolve, reject) {
+            clearFlags(context);
+            var location = firstEntityValue(entities, 'location');
+            if (!location)
+                location = context.currentLocation;
+            if (location)
+            {
+                context.bus_address = "Dirección de la estación de autobuses " + location;
+                delete context.missing_location;
+            }
+            else
+            {
+                context.missing_location = true;
+                delete context.bus_address;
+            }
+            return resolve(context);
+        });
+    },
+    searchForTrainStation({context, entities}) {
+        return new Promise(function(resolve, reject) {
+            clearFlags(context);
+            var location = firstEntityValue(entities, 'location');
+            if (!location)
+                location = context.currentLocation;
+            if (location)
+            {
+                context.train_address = "Dirección de la estación de trenes " + location;
+                delete context.missing_location;
+            }
+            else
+            {
+                context.missing_location = true;
+                delete context.train_address;
+            }
+            return resolve(context);
+        });
+    },
+    setLocation({context, entities}) {
+        return new Promise(function(resolve, reject) {
+            clearFlags(context);
+            var location = firstEntityValue(entities, 'location');
+            //TODO: more checks
+            if (location)
+            {
+                context.currentLocation = location;
+                context.location_set = true;
+                delete context.unknown_location;
+                //delete context.location_unset;
+            }
+            //console.log('setLocation(): bus_address=' + context.bus_address + ' train_address = ' + context.train_address);
+            return resolve(context);
+        });
+    },
+    unsetLocation({context, entities}) {
+        return new Promise(function(resolve, reject) {
+            clearFlags(context);
+            var location = firstEntityValue(entities, 'location');
+            //console.log('Inside unsetLocation(): location = ' + location + ' currentLocation = ' + context.currentLocation);
+            if (context.currentLocation && location === context.currentLocation)
+            {
+                delete context.currentLocation;
+                context.location_unset = true;
+                delete context.not_current_location;
+            }
+            else
+            {
+                context.not_current_location = true;
+                delete context.location_unset;
+            }
+            return resolve(context);
+        });
+    }
+  // *** *** END OF OUR ACTIONS *** ***
 };
 
 // Setting up our bot
@@ -251,5 +351,5 @@ function verifyRequestSignature(req, res, buf) {
   }
 }
 
-app.listen(PORT);
+app.listen(PORT, IP);
 console.log('Listening on :' + PORT + '...');
